@@ -6,18 +6,27 @@ class NLPManager:
 
     def __init__(self):
         # This is where you can initialize your model and any static configurations.
-        self.corpus: list[dict] = []
+        self.corpus: list = []
         pass
 
-    def load_corpus(self, documents: list[dict]) -> None:
+    def load_corpus(self, documents: list) -> None:
         """Loads the corpus of documents for RAG QA."""
         # Your corpus loading code goes here.
+        self.loaded = False
         self.corpus = []
         for doc in documents:
-            self.corpus.append({
-                "id": doc.get("id", "UNKNOWN"),
-                "text": doc.get("document", "").strip()
-            })
+            if not doc:
+                continue
+            if isinstance(doc, dict):
+                doc_id = doc.get("id") or doc.get("doc_id") or "UNKNOWN"
+                doc_text = doc.get("document") or doc.get("text") or ""
+                
+            else:
+                self.corpus.append({
+                    "id": str(doc_id),
+                    "text": str(doc).strip()
+                })
+                
         self.loaded = True
 
     def qa(self, question: str) -> str:
@@ -32,9 +41,13 @@ class NLPManager:
 
         # Your inference code goes here.
         if not self.corpus:
-            return "The database core is empty."
+            return ""
 
-        question_words = set(question.lower().split())
+        question_words = [w.strip("?,.!\'\"").lower() for w in question.split() if w]
+        if not question_words:
+            return "No question provided."
+
+        keywords = set(question_words)
         
         best_doc_text = self.corpus[0]["text"]
         max_overlap = -1
@@ -42,7 +55,7 @@ class NLPManager:
         for doc in self.corpus:
             doc_words = set(doc["text"].lower().split())
             # Count common words shared between the question and the document
-            overlap = len(question_words.intersection(doc_words))
+            overlap = len(keywords.intersection(doc_words))
             
             if overlap > max_overlap:
                 max_overlap = overlap
@@ -56,8 +69,8 @@ class NLPManager:
             clean_sentence = sentence.strip()
             if not clean_sentence:
                 continue
-            sentence_words = set(clean_sentence.lower().split())
-            sentence_overlap = len(question_words.intersection(sentence_words))
+            sentence_words = set([w.strip("?,.!\'\"").lower() for w in clean_sentence.split()])
+            sentence_overlap = len(keywords.intersection(sentence_words))
             
             if sentence_overlap > max_sentence_overlap:
                 max_sentence_overlap = sentence_overlap
