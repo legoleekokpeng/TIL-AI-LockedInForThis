@@ -4,30 +4,42 @@
 class NLPManager:
     loaded = False
 
-    def __init__(self):
+    def __init__(self): -> None:
         # This is where you can initialize your model and any static configurations.
-        self.corpus: list = []
+        self.corpus = []
         pass
 
-    def load_corpus(self, documents: list) -> None:
+    def load_corpus(self, documents) -> None:
         """Loads the corpus of documents for RAG QA."""
         # Your corpus loading code goes here.
         self.loaded = False
         self.corpus = []
-        for doc in documents:
-            if not doc:
-                continue
-            if isinstance(doc, dict):
-                doc_id = doc.get("id") or doc.get("doc_id") or "UNKNOWN"
-                doc_text = doc.get("document") or doc.get("text") or ""
-                
+        raw_list = []
+        try:
+            if isinstance(documents, dict):
+                raw_list = documents.get("documents") or documents.get("corpus") or documents.get("data") or []
+                if not raw_list and isinstance(documents, dict):
+                    raw_list = list(documents.values())
+            elif isinstance(documents, list):
+                raw_list = documents
             else:
-                self.corpus.append({
-                    "id": str(doc_id),
-                    "text": str(doc).strip()
-                })
+                raw_list = [documents]
+
+            for doc in raw_list:
+                if not doc:
+                    continue
                 
-        self.loaded = True
+                if isinstance(doc, dict):
+                    doc_text = doc.get("document") or doc.get("text") or doc.get("content") or ""
+                    self.corpus.append({"text": str(doc_text).strip()})
+                else:
+                    self.corpus.append({"text": str(doc).strip()})
+
+        except Exception as e:
+            print(f"[CRITICAL ERROR DURING PARSING]: {str(e)}")
+            
+        finally:
+            self.loaded = True
 
     def qa(self, question: str) -> str:
         """Performs question answering on an image of a document.
@@ -43,37 +55,27 @@ class NLPManager:
         if not self.corpus:
             return ""
 
-        question_words = [w.strip("?,.!\'\"").lower() for w in question.split() if w]
-        if not question_words:
-            return "No question provided."
+        f not self.corpus:
+            return ""
 
-        keywords = set(question_words)
-        
-        best_doc_text = self.corpus[0]["text"]
+        keywords = set([w.strip("?,.!\'\"").lower() for w in question.split() if w])
+        if not keywords:
+            return "No question context identified."
+
+        best_sentence = self.corpus[0]["text"] if self.corpus else ""
         max_overlap = -1
         
         for doc in self.corpus:
-            doc_words = set(doc["text"].lower().split())
-            # Count common words shared between the question and the document
-            overlap = len(keywords.intersection(doc_words))
-            
-            if overlap > max_overlap:
-                max_overlap = overlap
-                best_doc_text = doc["text"]
+            doc_text = doc["text"]
+            sentences = doc_text.split('.')
+            for sentence in sentences:
+                clean_sentence = sentence.strip()
+                if not clean_sentence:
+                    continue
+                sentence_words = set([w.strip("?,.!\'\"").lower() for w in clean_sentence.split()])
+                overlap = len(keywords.intersection(sentence_words))
+                if overlap > max_overlap:
+                    max_overlap = overlap
+                    best_sentence = clean_sentence + "."
 
-        sentences = best_doc_text.split('.')
-        best_sentence = best_doc_text  # Fallback to full text if splitting is messy
-        max_sentence_overlap = -1
-
-        for sentence in sentences:
-            clean_sentence = sentence.strip()
-            if not clean_sentence:
-                continue
-            sentence_words = set([w.strip("?,.!\'\"").lower() for w in clean_sentence.split()])
-            sentence_overlap = len(keywords.intersection(sentence_words))
-            
-            if sentence_overlap > max_sentence_overlap:
-                max_sentence_overlap = sentence_overlap
-                best_sentence = clean_sentence + "."
-                
         return best_sentence
