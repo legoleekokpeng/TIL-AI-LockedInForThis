@@ -16,6 +16,7 @@ WORKDIR /workspace
 RUN pip install -U pip
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install transformers huggingface-hub
 
 # Copies your source files.
 COPY src .
