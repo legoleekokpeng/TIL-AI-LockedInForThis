@@ -1,76 +1,45 @@
-"""Manages the NLP model using SentenceTransformer dense embeddings."""
-
-import numpy as np
-from sentence_transformers import SentenceTransformer
-
 class NLPManager:
+    loaded = False
+
     def __init__(self) -> None:
-        self.model = SentenceTransformer("all-MiniLM-L6-v2")
-        self.chunks = []
-        self.loaded = False
-
-    def load_corpus(self, documents: list) -> None:
-        """Chunks documents and pre-computes dense neural network embeddings."""
-        self.loaded = False
-        self.chunks = []
-
-        raw_list = []
-        if isinstance(documents, dict):
-            raw_list = documents.get("documents") or documents.get("corpus") or documents.get("data") or []
-            if not raw_list:
-                raw_list = list(documents.values())
-        elif isinstance(documents, list):
-            raw_list = documents
-        else:
-            raw_list = [documents]
-
-        # Process text chunks
-        for doc in raw_list:
-            if not doc:
-                continue
-                
-            text = doc.get("document") or doc.get("text") or doc.get("content") or "" if isinstance(doc, dict) else str(doc)
-            
-            # Chunk into sentences
-            sentences = text.split('.')
-            for sentence in sentences:
-                clean_sentence = sentence.strip()
-                if len(clean_sentence) < 15:  # Skip empty lines or stray characters
-                    continue
-                    
-                chunk_text = clean_sentence + "."
-                self.chunks.append({
-                    "text": chunk_text,
-                    "vector": None
-                })
-
-        if self.chunks:
-            texts_to_embed = [chunk["text"] for chunk in self.chunks]
-            embeddings = self.model.encode(texts_to_embed, normalize_embeddings=True)
-            
-            for i, emb in enumerate(embeddings):
-                self.chunks[i]["vector"] = emb
-
+        self.corpus: list = []
         self.loaded = True
 
+    def load_corpus(self, documents: list) -> None:
+        """Ingests the document corpus array matching the template keys exactly."""
+        self.corpus = []
+        for doc in documents:
+            self.corpus.append({
+                "id": doc.get("id"),
+                "text": doc.get("document", "").strip()
+            })
+        self.loaded = True
+
+    def _score_relevance(self, query: str, context: str) -> float:
+        """Calculates keyword match density score between a query and a text body."""
+        query_words = set([w.strip("?,.!\'\"()[]{}").lower() for w in query.split() if w])
+        if not query_words:
+            return 0.0
+            
+        context_lower = context.lower()
+        score = 0.0
+        for word in query_words:
+            if word in context_lower:
+                score += context_lower.count(word)
+        return score
+
     def qa(self, question: str) -> str:
-        """Calculates semantic similarity using a dense vector dot product."""
-        if not self.chunks:
+        """Locates the absolute best document source block and returns its text directly."""
+        if not self.corpus:
             return ""
 
-        query_vector = self.model.encode(question, normalize_embeddings=True)
+        best_context = self.corpus[0]["text"]
+        max_score = -1.0
 
-        best_chunk_text = self.chunks[0]["text"]
-        max_similarity = -1.0
+        for doc in self.corpus:
+            score = self._score_relevance(question, doc["text"])
+            if score > max_score:
+                max_score = score
+                best_context = doc["text"]
 
-        for chunk in self.chunks:
-            if chunk["vector"] is None:
-                continue
-            
-            similarity = float(np.dot(query_vector, chunk["vector"]))
-            
-            if similarity > max_similarity:
-                max_similarity = similarity
-                best_chunk_text = chunk["text"]
-
-        return best_chunk_text
+        return str(best_context).strip()
