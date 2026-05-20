@@ -12,48 +12,44 @@ class NLPManager:
         instances = payload.get("instances", [])
         for instance in instances:
             documents_list = instance.get("documents", [])
-            for doc in documents_list:
-                self.corpus.append({
-                    "text": str(doc).strip()
-                })
+            for doc_identifier in documents_list:
+                self.corpus.append(str(doc_identifier).strip())
                     
         self.loaded = True
-        
         return {"predictions": ["loaded"]}
 
-    def _score_relevance(self, query: str, context: str) -> float:
-        """Calculates keyword token density matching rules."""
+    def _score_id_relevance(self, query: str, doc_id: str) -> float:
         query_words = set([w.strip("?,.!\'\"()[]{}").lower() for w in query.split() if w])
-        if not query_words:
-            return 0.0
-            
-        context_lower = context.lower()
+        doc_clean = doc_id.lower().replace(".txt", "").replace("_", " ").replace("-", " ")
+        
         score = 0.0
         for word in query_words:
-            if word in context_lower:
-                score += context_lower.count(word)
+            if word in doc_clean:
+                score += 1.0
         return score
 
     def qa(self, question_payload: dict) -> dict:
-        """Unpacks the question instances and packages answers into the required predictions format."""
         if not self.corpus:
             return {"predictions": []}
 
         instances = question_payload.get("instances", [])
-        answers_list = []
+        final_predictions = []
 
         for instance in instances:
             question_text = instance.get("question", "")
+
+            scored_docs = []
+            for doc_id in self.corpus:
+                score = self._score_id_relevance(question_text, doc_id)
+                scored_docs.append((doc_id, score))
             
-            best_context = self.corpus[0]["text"] if self.corpus else ""
-            max_score = -1.0
+            scored_docs.sort(key=lambda x: x[1], reverse=True)
 
-            for doc in self.corpus:
-                score = self._score_relevance(question_text, doc["text"])
-                if score > max_score:
-                    max_score = score
-                    best_context = doc["text"]
+            top_3 = [doc[0] for doc in scored_docs[:3]]
+            
+            while len(top_3) < 3 and self.corpus:
+                top_3.append(self.corpus[0])
 
-            answers_list.append(str(best_context).strip())
-
-        return {"predictions": answers_list}
+            final_predictions.append(top_3)
+            
+        return {"predictions": final_predictions}
