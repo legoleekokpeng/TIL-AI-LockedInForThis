@@ -41,19 +41,21 @@ async def _load_task(documents) -> None:
         load_state.error = str(e)
 
 
+
+from typing import Any
+
 @app.post("/nlp")
-async def nlp(request: Request) -> dict[str, list[str]]:
+# changed to Any
+async def nlp(request: Request) -> Any:
     inputs_json = await request.json()
     first = inputs_json["instances"][0]
-
-    # Load: any request carrying `documents` kicks off the load.
+   
     if first.get("documents") is not None:
         async with load_state.lock:
             if load_state.status == "idle":
                 load_state.status = "loading"
                 load_state.task = asyncio.create_task(_load_task(first["documents"]))
             return {"predictions": [load_state.status]}
-    # Poll: returns current status (subsequent polls).
     if first.get("poll") is not None:
         return {"predictions": [load_state.status]}
 
